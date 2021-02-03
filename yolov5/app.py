@@ -70,7 +70,8 @@ def handler(event, context):
     with open(SAVE_PATH,'rb') as f:
         img_b64 = base64.b64encode(f.read()).decode('utf-8')
     print("done")
-    return img_b64
+    response = {'img':img_b64}
+    return response
 
 if __name__ == '__main__':
     input_file = './data/images/bus.jpg'
