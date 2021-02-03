@@ -1,26 +1,31 @@
-import torch, time, base64, cv2, numpy as np
+import cv2
+import torch, time, base64
+import numpy as np
 from pathlib import Path
 
 from models.experimental import attempt_load
-from utils.datasets import LoadStreams, LoadImages
-from utils.general import check_img_size, check_requirements, non_max_suppression, apply_classifier, scale_coords, \
-    xyxy2xywh, strip_optimizer, set_logging, increment_path
+from utils.datasets import LoadImages
+from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.plots import plot_one_box
-from utils.torch_utils import select_device, load_classifier, time_synchronized
+from utils.torch_utils import select_device, time_synchronized
 
 CONF_THRESH = 0.25
 IOU_THRESH = 0.45
 WORK_JPG = '/tmp/in.png'
 SAVE_PATH = '/tmp/out.png'
 
-def handler(event, context): 
+def handler(event, context):
     device = select_device('cpu')
     
     # load_model
     model =attempt_load('yolov5s.pt', map_location=device)
     stride = int(model.stride.max())
     imgsz = check_img_size(640, s=stride)
-    img_bin = base64.b64decode(event['img'])
+    
+    # print(event['img'])
+    # print(type(event['img'].encode('utf-8')))
+    
+    img_bin = base64.b64decode(event['img'].encode('utf-8'))
     img_array = np.frombuffer(img_bin,dtype=np.uint8)
     img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
     cv2.imwrite(WORK_JPG,img)
@@ -71,7 +76,7 @@ if __name__ == '__main__':
     input_file = './data/images/bus.jpg'
     data = {}
     with open(input_file,'rb') as f:
-        data['img']= base64.b64encode(f.read())
+        data['img']= base64.b64encode(f.read()).decode('utf-8')
     output_b64 = handler(data,'context')
     img_bin = base64.b64decode(output_b64.encode('utf-8'))
     img_array = np.frombuffer(img_bin,dtype=np.uint8)
