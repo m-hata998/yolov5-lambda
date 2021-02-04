@@ -22,9 +22,6 @@ def handler(event, context):
     stride = int(model.stride.max())
     imgsz = check_img_size(640, s=stride)
     
-    # print(event['img'])
-    # print(type(event['img'].encode('utf-8')))
-    
     img_bin = base64.b64decode(event['img'].encode('utf-8'))
     img_array = np.frombuffer(img_bin,dtype=np.uint8)
     img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
@@ -79,7 +76,8 @@ if __name__ == '__main__':
     with open(input_file,'rb') as f:
         data['img']= base64.b64encode(f.read()).decode('utf-8')
     output_b64 = handler(data,'context')
-    img_bin = base64.b64decode(output_b64.encode('utf-8'))
+    img_bin = base64.b64decode(output_b64['img'].encode('utf-8'))
     img_array = np.frombuffer(img_bin,dtype=np.uint8)
     img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
     cv2.imwrite('./out.png',img)
+    exit()
