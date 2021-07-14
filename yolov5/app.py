@@ -3,6 +3,8 @@ import torch, time, base64
 import numpy as np
 import boto3
 import os
+import sys
+import json
 from pathlib import Path
 
 from models.experimental import attempt_load
@@ -23,7 +25,7 @@ def handler(event, context):
 
     bucket = event['Records'][0]['s3']['bucket']['name']
     inputpath = event['Records'][0]['s3']['object']['key']
-    filename = os.path.basename(inputpath);
+    filename = os.path.basename(inputpath)
     outputfolder = os.environ['OUTPUT_PATH']
     outputpath = os.path.join(outputfolder, filename)
     inputfile = s3.Object(bucket, inputpath)
@@ -55,6 +57,7 @@ def execyolo(event, context):
     
     t0 = time.time()
     
+    work = {}
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device).float()
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -68,27 +71,45 @@ def execyolo(event, context):
         # Apply NMS
         pred = non_max_suppression(pred, CONF_THRESH, IOU_THRESH, classes=None, agnostic=False)
         t2 = time_synchronized()
-    
+        
         # Process detections
         for i, det in enumerate(pred):  # detections per image
             p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
             p = Path(p)
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+            
             if len(det):
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
                 # Print results
                 for c in det[:, -1].unique():
                     n = (det[:, -1] == c).sum()  # detections per class
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
+                    work[names[int(c)]] = n.item() # JSONで返すための辞書に入れる
                 
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
                     label = f'{names[int(cls)]} {conf:.2f}'
                     plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
+                
         print(f'{s}Done. ({t2 - t1:.3f}s)') 
         cv2.imwrite(SAVE_PATH, im0)
     with open(SAVE_PATH,'rb') as f:
         img_b64 = base64.b64encode(f.read()).decode('utf-8')
     print("done")
-    response = {'img':img_b64}
+    response = {'img':img_b64, 'dict': json.dumps(work)}
     return response
+
+if __name__ == '__main__':
+    input_file = './data/images/bus.jpg'
+    data = {}
+    with open(input_file,'rb') as f:
+        data['img']= base64.b64encode(f.read()).decode('utf-8')
+    output_b64 = execyolo(data,'context')
+    outputdict = {'filename' : os.path.basename(input_file)}
+    outputdict['dict'] = output_b64['dict']
+    img_bin = base64.b64decode(output_b64['img'].encode('utf-8'))
+    img_array = np.frombuffer(img_bin,dtype=np.uint8)
+    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+    cv2.imwrite('./out.png',img)
+    exit()
+    
