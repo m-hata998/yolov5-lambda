@@ -1,6 +1,8 @@
 import cv2
 import torch, time, base64
 import numpy as np
+import boto3
+import os
 from pathlib import Path
 
 from models.experimental import attempt_load
@@ -14,7 +16,28 @@ IOU_THRESH = 0.45
 WORK_JPG = '/tmp/in.png'
 SAVE_PATH = '/tmp/out.png'
 
+
 def handler(event, context):
+    s3 = boto3.resource('s3')
+    device = select_device('cpu')
+
+    bucket = event['Records'][0]['s3']['bucket']['name']
+    inputpath = event['Records'][0]['s3']['object']['key']
+    filename = os.path.basename(inputpath);
+    outputfolder = os.environ['OUTPUT_PATH']
+    outputpath = os.path.join(outputfolder, filename)
+    inputfile = s3.Object(bucket, inputpath)
+    inputimg = inputfile.get()
+    
+    data = {}
+    data['img']= base64.b64encode(inputimg["Body"].read()).decode('utf-8')
+    output_b64 = execyolo(data,'context')
+    newobject = s3.Object(bucket, outputpath)
+    newobject.upload_file(SAVE_PATH)
+    response = {'newobject':output_b64['img']}
+    return response
+
+def execyolo(event, context):
     device = select_device('cpu')
     
     # load_model
@@ -69,15 +92,3 @@ def handler(event, context):
     print("done")
     response = {'img':img_b64}
     return response
-
-if __name__ == '__main__':
-    input_file = './data/images/bus.jpg'
-    data = {}
-    with open(input_file,'rb') as f:
-        data['img']= base64.b64encode(f.read()).decode('utf-8')
-    output_b64 = handler(data,'context')
-    img_bin = base64.b64decode(output_b64['img'].encode('utf-8'))
-    img_array = np.frombuffer(img_bin,dtype=np.uint8)
-    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-    cv2.imwrite('./out.png',img)
-    exit()
