@@ -5,6 +5,7 @@ import boto3
 import os
 import sys
 import json
+from datetime import datetime
 from pathlib import Path
 
 from models.experimental import attempt_load
@@ -17,6 +18,7 @@ CONF_THRESH = 0.25
 IOU_THRESH = 0.45
 WORK_JPG = '/tmp/in.png'
 SAVE_PATH = '/tmp/out.png'
+JSON_PATH = '/tmp/out.json'
 
 
 def handler(event, context):
@@ -26,6 +28,7 @@ def handler(event, context):
     bucket = event['Records'][0]['s3']['bucket']['name']
     inputpath = event['Records'][0]['s3']['object']['key']
     filename = os.path.basename(inputpath)
+    filenameorg = os.path.basename(inputpath)
     outputfolder = os.environ['OUTPUT_PATH']
     outputpath = os.path.join(outputfolder, filename)
     inputfile = s3.Object(bucket, inputpath)
@@ -33,14 +36,25 @@ def handler(event, context):
     
     data = {}
     data['img']= base64.b64encode(inputimg["Body"].read()).decode('utf-8')
+    data['filename'] = filename
     output_b64 = execyolo(data,'context')
+    # imgファイルのS3へのアップロード
     newobject = s3.Object(bucket, outputpath)
     newobject.upload_file(SAVE_PATH)
+   
+    # jsonファイルのS3へのアップロード
+    outputjsonfolder = os.environ['OUTPUTJSON_PATH']
+    outputfileorg = os.path.splitext(os.path.basename(input_file))[0]
+    outputjsonpath = os.path.join(outputjsonfolder, outputfileorg + '.json')    
+    newjsonobject = s3.Object(bucket, outputjsonpath)
+    newjsonobject.upload_file(JSON_PATH)
+    
     response = {'newobject':output_b64['img']}
     return response
 
 def execyolo(event, context):
     device = select_device('cpu')
+    filename = event['filename']
     
     # load_model
     model =attempt_load('yolov5s.pt', map_location=device)
@@ -57,7 +71,7 @@ def execyolo(event, context):
     
     t0 = time.time()
     
-    work = {}
+    work = dict()
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device).float()
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -95,21 +109,36 @@ def execyolo(event, context):
         cv2.imwrite(SAVE_PATH, im0)
     with open(SAVE_PATH,'rb') as f:
         img_b64 = base64.b64encode(f.read()).decode('utf-8')
-    print("done")
-    response = {'img':img_b64, 'dict': json.dumps(work)}
+        
+    # JSONファイルの書き出し
+    nowdatetime = datetime.now()
+    outputdict = {'filename' : filename, 'time' : nowdatetime.strftime('%Y/%m/%d %H:%M:%S'), 'content' : work}
+    with open(JSON_PATH, mode='wt', encoding='utf-8') as file:
+        json.dump(outputdict, file, ensure_ascii=False)
+    print(outputdict)
+    response = {'img':img_b64, 'dict': outputdict}
     return response
 
 if __name__ == '__main__':
-    input_file = './data/images/bus.jpg'
+    args = sys.argv
+    if 2 > len(args):
+        input_file = './data/images/bus.jpg'
+    else :
+        input_file = args[1]
+    output_file = os.path.splitext(os.path.basename(input_file))
+    filename = os.path.basename(input_file)
     data = {}
     with open(input_file,'rb') as f:
         data['img']= base64.b64encode(f.read()).decode('utf-8')
+    data['filename'] = filename
     output_b64 = execyolo(data,'context')
-    outputdict = {'filename' : os.path.basename(input_file)}
-    outputdict['dict'] = output_b64['dict']
     img_bin = base64.b64decode(output_b64['img'].encode('utf-8'))
     img_array = np.frombuffer(img_bin,dtype=np.uint8)
     img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-    cv2.imwrite('./out.png',img)
+    outputimg = os.path.join('.', output_file[0] + '.' + output_file[1])
+    cv2.imwrite(outputimg,img)
+
+    outputjson = os.path.join('./json', output_file[0] + '.json')
+    with open(outputjson, mode='wt', encoding='utf-8') as file:
+        json.dump(output_b64['dict'], file, ensure_ascii=False)
     exit()
-    
