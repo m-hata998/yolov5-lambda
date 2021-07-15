@@ -5,7 +5,7 @@ import boto3
 import os
 import sys
 import json
-from datetime import datetime
+import datetime
 from pathlib import Path
 
 from models.experimental import attempt_load
@@ -28,7 +28,6 @@ def handler(event, context):
     bucket = event['Records'][0]['s3']['bucket']['name']
     inputpath = event['Records'][0]['s3']['object']['key']
     filename = os.path.basename(inputpath)
-    filenameorg = os.path.basename(inputpath)
     outputfolder = os.environ['OUTPUT_PATH']
     outputpath = os.path.join(outputfolder, filename)
     inputfile = s3.Object(bucket, inputpath)
@@ -37,6 +36,7 @@ def handler(event, context):
     data = {}
     data['img']= base64.b64encode(inputimg["Body"].read()).decode('utf-8')
     data['filename'] = filename
+    data['flg'] = True 
     output_b64 = execyolo(data,'context')
     # imgファイルのS3へのアップロード
     newobject = s3.Object(bucket, outputpath)
@@ -44,7 +44,7 @@ def handler(event, context):
    
     # jsonファイルのS3へのアップロード
     outputjsonfolder = os.environ['OUTPUTJSON_PATH']
-    outputfileorg = os.path.splitext(os.path.basename(input_file))[0]
+    outputfileorg = os.path.splitext(os.path.basename(inputpath))[0]
     outputjsonpath = os.path.join(outputjsonfolder, outputfileorg + '.json')    
     newjsonobject = s3.Object(bucket, outputjsonpath)
     newjsonobject.upload_file(JSON_PATH)
@@ -110,8 +110,13 @@ def execyolo(event, context):
     with open(SAVE_PATH,'rb') as f:
         img_b64 = base64.b64encode(f.read()).decode('utf-8')
         
+    # Lambdaコンテナ起動時　実行時間を日本時間に調整
+    nowdatetime = datetime.datetime.now()
+    if event['flg'] :
+        td = datetime.timedelta(hours=9)
+        nowdatetime = nowdatetime + td
+    
     # JSONファイルの書き出し
-    nowdatetime = datetime.now()
     outputdict = {'filename' : filename, 'time' : nowdatetime.strftime('%Y/%m/%d %H:%M:%S'), 'content' : work}
     with open(JSON_PATH, mode='wt', encoding='utf-8') as file:
         json.dump(outputdict, file, ensure_ascii=False)
@@ -131,6 +136,7 @@ if __name__ == '__main__':
     with open(input_file,'rb') as f:
         data['img']= base64.b64encode(f.read()).decode('utf-8')
     data['filename'] = filename
+    data['flg'] = False 
     output_b64 = execyolo(data,'context')
     img_bin = base64.b64decode(output_b64['img'].encode('utf-8'))
     img_array = np.frombuffer(img_bin,dtype=np.uint8)
