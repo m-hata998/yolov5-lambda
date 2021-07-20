@@ -39,14 +39,15 @@ def handler(event, context):
     data['flg'] = True 
     output_b64 = execyolo(data,'context')
     # imgファイルのS3へのアップロード
-    newobject = s3.Object(bucket, outputpath)
+    newbucket = os.environ['OUTPUT_BUCKET']
+    newobject = s3.Object(newbucket, outputpath)
     newobject.upload_file(SAVE_PATH)
    
     # jsonファイルのS3へのアップロード
     outputjsonfolder = os.environ['OUTPUTJSON_PATH']
     outputfileorg = os.path.splitext(os.path.basename(inputpath))[0]
-    outputjsonpath = os.path.join(outputjsonfolder, outputfileorg + '.json')    
-    newjsonobject = s3.Object(bucket, outputjsonpath)
+    outputjsonpath = os.path.join(outputjsonfolder, outputfileorg + '.json')   
+    newjsonobject = s3.Object(newbucket, outputjsonpath)
     newjsonobject.upload_file(JSON_PATH)
     
     response = {'newobject':output_b64['img']}
