@@ -28,7 +28,7 @@ def handler(event, context):
     bucket = event['Records'][0]['s3']['bucket']['name']
     inputpath = event['Records'][0]['s3']['object']['key']
     filename = os.path.basename(inputpath)
-    outputfolder = os.environ['OUTPUT_PATH']
+    outputfolder = 'image'
     outputpath = os.path.join(outputfolder, filename)
     inputfile = s3.Object(bucket, inputpath)
     inputimg = inputfile.get()
@@ -44,7 +44,7 @@ def handler(event, context):
     newobject.upload_file(SAVE_PATH)
    
     # jsonファイルのS3へのアップロード
-    outputjsonfolder = os.environ['OUTPUTJSON_PATH']
+    outputjsonfolder = 'json'
     outputfileorg = os.path.splitext(os.path.basename(inputpath))[0]
     outputjsonpath = os.path.join(outputjsonfolder, outputfileorg + '.json')   
     newjsonobject = s3.Object(newbucket, outputjsonpath)
