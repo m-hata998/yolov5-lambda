@@ -41,7 +41,7 @@ def handler(event, context):
     # imgファイルのS3へのアップロード
     newbucket = os.environ['OUTPUT_BUCKET']
     newobject = s3.Object(newbucket, outputpath)
-    newobject.upload_file(SAVE_PATH)
+    newobject.upload_file(SAVE_PATH, ExtraArgs={"ACL": "public-read"})
    
     # jsonファイルのS3へのアップロード
     outputjsonfolder = 'json'
