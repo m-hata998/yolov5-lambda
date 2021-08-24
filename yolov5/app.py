@@ -50,7 +50,7 @@ def handler(event, context):
     newjsonobject = s3.Object(newbucket, outputjsonpath)
     newjsonobject.upload_file(JSON_PATH)
     
-    response = {'newobject':output_b64['img']}
+    response = {'statusCode': 200}
     return response
 
 def execyolo(event, context):
